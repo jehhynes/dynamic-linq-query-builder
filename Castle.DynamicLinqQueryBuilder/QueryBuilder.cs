@@ -196,13 +196,22 @@ namespace Castle.DynamicLinqQueryBuilder
 
         private static Expression BuildExpressionTree(ParameterExpression pe, IFilterRule rule, BuildExpressionOptions options)
         {
-
             if (rule.Rules != null && rule.Rules.Any())
             {
-                var expressions =
-                    rule.Rules.Select(childRule => BuildExpressionTree(pe, childRule, options))
+                string collectionPath = GetCollectionPath(pe.Type, rule.Rules.First());
+
+                List<Expression> expressions;
+                if (collectionPath != null && rule.Rules.Count() > 1 && rule.Rules.All(x => GetCollectionPath(pe.Type, x) == collectionPath))
+                {
+                    //This is a group containing common references to the same collection. It should be a single Any() expression
+                    expressions = new List<Expression>() { BuildGroupedCollectionExpression(pe, rule.Rules, options, collectionPath, collectionPath) };
+                }
+                else
+                {
+                    expressions = rule.Rules.Select(childRule => BuildExpressionTree(pe, childRule, options))
                         .Where(expression => expression != null)
                         .ToList();
+                }
 
                 var expressionTree = expressions.First();
 
@@ -231,8 +240,8 @@ namespace Castle.DynamicLinqQueryBuilder
                     var propertyList = rule.Field.Split('.');
                     if (propertyList.Length > 1)
                     {
-                        var propertyCollectionEnumerator = propertyList.AsEnumerable().GetEnumerator();
-                        return BuildNestedExpression(pe, propertyCollectionEnumerator, rule, options, type);
+                        var propertyCollection = new Queue<string>(propertyList);
+                        return BuildNestedExpression(pe, propertyCollection, new[] { rule }, options, type);
                     }
                     else
                     {
@@ -242,6 +251,34 @@ namespace Castle.DynamicLinqQueryBuilder
                 }
             }
             return null;
+        }
+
+        private static string GetCollectionPath(Type rootType, IFilterRule rule)
+        {
+            if (rule.Field == null) return null;
+
+            var propertyNames = rule.Field.Split('.');
+
+            string collectionPath = null;
+            Type curType = rootType;
+            for (int i = 0; i < propertyNames.Length - 1; i++) 
+            {
+                var propertyName = propertyNames[i];
+                var property = curType.GetProperty(propertyName);
+                var enumerable = property.PropertyType.GetInterface("IEnumerable`1");
+
+                if (property.PropertyType != typeof(string) && enumerable != null)
+                {
+                    collectionPath = string.Join(".", propertyNames.Take(i + 1));
+                    curType = enumerable.GetGenericArguments()[0];
+                }
+                else
+                {
+                    curType = property.PropertyType;
+                }
+            }
+
+            return collectionPath;
         }
 
         public static System.Type GetCSharpType(string typeName)
@@ -276,11 +313,16 @@ namespace Castle.DynamicLinqQueryBuilder
             return type;
         }
 
-        private static Expression BuildNestedExpression(Expression expression, IEnumerator<string> propertyCollectionEnumerator, IFilterRule rule, BuildExpressionOptions options, Type type)
+        private static Expression BuildGroupedCollectionExpression(Expression expression, IEnumerable<IFilterRule> rules, BuildExpressionOptions options, string condition, string collectionPath)
         {
-            while (propertyCollectionEnumerator.MoveNext())
+            return BuildNestedExpression(expression, new Queue<string>(collectionPath.Split('.')), rules, options, null, condition, groupPrefix: collectionPath + ".");
+        }
+
+        private static Expression BuildNestedExpression(Expression expression, Queue<string> propertyCollection, IEnumerable<IFilterRule> rules, BuildExpressionOptions options, Type type, string condition = null, string groupPrefix = null)
+        {
+            while (propertyCollection.Count > 0)
             {
-                var propertyName = propertyCollectionEnumerator.Current;
+                string propertyName = propertyCollection.Dequeue();
                 var property = expression.Type.GetProperty(propertyName);
                 expression = Expression.Property(expression, property);
 
@@ -292,7 +334,30 @@ namespace Castle.DynamicLinqQueryBuilder
                     var predicateFnType = typeof(Func<,>).MakeGenericType(elementType, typeof(bool));
                     var parameterExpression = Expression.Parameter(elementType);
 
-                    Expression body = BuildNestedExpression(parameterExpression, propertyCollectionEnumerator, rule, options, type);
+                    Expression body = null;
+                    if (groupPrefix != null && propertyCollection.Count == 0 && rules.Count() > 1)
+                    {
+                        bool isOr = condition.ToLower() == "or";
+
+                        foreach (var rule in rules)
+                        {
+                            if (!rule.Field.StartsWith(groupPrefix))
+                                throw new Exception("When a groupPrefix is supplied, all the rules in the group should start with this same property path");
+
+                            var childProperties = new Queue<string>(rule.Field.Substring(groupPrefix.Length).Split('.'));
+                            var childExpr = BuildNestedExpression(parameterExpression, childProperties, new[] { rule }, options, GetCSharpType(rule.Type));
+                            if (body == null)
+                                body = childExpr;
+                            else
+                                body = isOr ? Expression.OrElse(body, childExpr) : Expression.AndAlso(body, childExpr);
+                        }
+                    }
+                    else
+                    {
+                        body = BuildNestedExpression(parameterExpression, propertyCollection, rules, options, type, condition, groupPrefix);
+                    }
+
+                    
                     var predicate = Expression.Lambda(predicateFnType, body, parameterExpression);
 
                     var notnull = Expression.NotEqual(expression, Expression.Constant(null, typeof(object)));
@@ -319,17 +384,17 @@ namespace Castle.DynamicLinqQueryBuilder
                             predicate
                         );
                     }
-                    
+
                 }
                 else if (options.NullCheckNestedCLRObjects && !expression.Type.IsValueType && propertyType != typeof(string))
                 {
                     var notnull = IsNotNull(expression);
-                    Expression body = BuildNestedExpression(expression, propertyCollectionEnumerator, rule, options, type);
+                    Expression body = BuildNestedExpression(expression, propertyCollection, rules, options, type, condition, groupPrefix);
                     return Expression.AndAlso(notnull, body);
                 }
             }
 
-            return BuildOperatorExpression(expression, rule, options, type);
+            return BuildOperatorExpression(expression, rules.Single(), options, type);
         }
 
         private static Expression BuildOperatorExpression(Expression propertyExp, IFilterRule rule, BuildExpressionOptions options, Type type)
