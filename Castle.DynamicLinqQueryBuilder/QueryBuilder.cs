@@ -224,7 +224,7 @@ namespace Castle.DynamicLinqQueryBuilder
                     counter++;
                 }
 
-                return expressionTree;
+                return HandleNegation(expressionTree, rule.Not);
             }
             if (rule.Field != null)
             {
@@ -233,7 +233,7 @@ namespace Castle.DynamicLinqQueryBuilder
                 if (options.UseIndexedProperty)
                 {
                     var propertyExp = Expression.Property(pe, options.IndexedPropertyName, Expression.Constant(rule.Field));
-                    return BuildOperatorExpression(propertyExp, rule, options, type);
+                    return HandleNegation(BuildOperatorExpression(propertyExp, rule, options, type), rule.Not);
                 }
                 else
                 {
@@ -241,16 +241,22 @@ namespace Castle.DynamicLinqQueryBuilder
                     if (propertyList.Length > 1)
                     {
                         var propertyCollection = new Queue<string>(propertyList);
-                        return BuildNestedExpression(pe, propertyCollection, new[] { rule }, options, type);
+                        return HandleNegation(BuildNestedExpression(pe, propertyCollection, new[] { rule }, options, type), rule.Not);
                     }
                     else
                     {
                         var propertyExp = Expression.Property(pe, rule.Field);
-                        return BuildOperatorExpression(propertyExp, rule, options, type);
+                        return HandleNegation(BuildOperatorExpression(propertyExp, rule, options, type), rule.Not);
                     }
                 }
             }
             return null;
+        }
+
+        static Expression HandleNegation(Expression expression, bool not)
+        {
+            if (not) return Expression.Not(expression);
+            else return expression;
         }
 
         private static string GetCollectionPath(Type rootType, IFilterRule rule)

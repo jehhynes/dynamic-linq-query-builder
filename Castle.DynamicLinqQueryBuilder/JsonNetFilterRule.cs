@@ -65,6 +65,13 @@ namespace Castle.DynamicLinqQueryBuilder
         /// The value.
         /// </value>
         public object Value { get; set; }
+        /// <summary>
+        /// Gets or sets whether the rule is negated.
+        /// </summary>
+        /// <value>
+        /// Whether the rule is negated.
+        /// </value>
+        public bool Not { get; set; }
 
         IEnumerable<IFilterRule> IFilterRule.Rules => Rules;
     }

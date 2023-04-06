@@ -3341,55 +3341,5 @@ namespace Castle.DynamicLinqQueryBuilder.Tests.Rules
             Assert.IsFalse(result.Any());
         }
         #endregion
-
-
-        [Test]
-        public void GroupCollections_RulesEvaluatedTogether()
-        {
-            var rule = new JsonNetFilterRule
-            {
-                Condition = "and",
-                Rules = new List<JsonNetFilterRule>
-                {
-                    new JsonNetFilterRule()
-                    {
-                        Field = "Items.Name",
-                        Id = "Items.Name",
-                        Operator = "equal",
-                        Type="string",
-                        Value = "1"
-                    },
-                    new JsonNetFilterRule()
-                    {
-                        Field = "Items.Category",
-                        Id = "Items.Category",
-                        Operator = "equal",
-                        Type="string",
-                        Value = "b"
-                    },
-                }
-            };
-
-            var list = new List<CollectionClass>();
-            list.Add(new CollectionClass() { Name = "1", Items = new List<CollectionRelatedClass>() { new CollectionRelatedClass { Name = "1", Category = "a" }, new CollectionRelatedClass { Name = "2", Category = "b" } } });
-            list.Add(new CollectionClass() { Name = "2", Items = new List<CollectionRelatedClass>() { new CollectionRelatedClass { Name = "2", Category = "a" }, new CollectionRelatedClass { Name = "1", Category = "b" } } });
-            list.Add(new CollectionClass() { Name = "3", Items = new List<CollectionRelatedClass>() { new CollectionRelatedClass { Name = "4", Category = "b" } } });
-
-            var results = list.BuildQuery(rule);
-            Assert.AreEqual(1, results.Count());
-            Assert.AreEqual("2", results.Single().Name);
-        }
-
-        private class CollectionClass
-        {
-            public string Name { get; set; }
-            public string Category { get; set; }
-            public List<CollectionRelatedClass> Items { get; set; }
-        }
-        private class CollectionRelatedClass
-        {
-            public string Name { get; set; }
-            public string Category { get; set; }
-        }
     }
 }

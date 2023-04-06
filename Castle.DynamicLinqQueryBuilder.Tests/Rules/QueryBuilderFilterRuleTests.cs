@@ -3471,5 +3471,177 @@ namespace Castle.DynamicLinqQueryBuilder.Tests.Rules
             Assert.IsFalse(result.Any());
         }
         #endregion
+
+
+
+        [Test]
+        public void GroupCollections_RulesEvaluatedTogether()
+        {
+            var rule = new JsonNetFilterRule
+            {
+                Condition = "and",
+                Rules = new List<JsonNetFilterRule>
+                {
+                    new JsonNetFilterRule()
+                    {
+                        Field = "Items.Name",
+                        Id = "Items.Name",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "1"
+                    },
+                    new JsonNetFilterRule()
+                    {
+                        Field = "Items.Category",
+                        Id = "Items.Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "b"
+                    },
+                }
+            };
+
+            var list = new List<CollectionClass>();
+            list.Add(new CollectionClass() { Name = "1", Items = new List<SimpleClass>() { new SimpleClass { Name = "1", Category = "a" }, new SimpleClass { Name = "2", Category = "b" } } });
+            list.Add(new CollectionClass() { Name = "2", Items = new List<SimpleClass>() { new SimpleClass { Name = "2", Category = "a" }, new SimpleClass { Name = "1", Category = "b" } } });
+            list.Add(new CollectionClass() { Name = "3", Items = new List<SimpleClass>() { new SimpleClass { Name = "4", Category = "b" } } });
+
+            var results = list.BuildQuery(rule);
+            Assert.AreEqual(1, results.Count());
+            Assert.AreEqual("2", results.Single().Name);
+        }
+
+        private class CollectionClass
+        {
+            public string Name { get; set; }
+            public List<SimpleClass> Items { get; set; }
+        }
+        private class SimpleClass
+        {
+            public string Name { get; set; }
+            public string Category { get; set; }
+        }
+
+        [Test]
+        public void Negation_TestGroup()
+        {
+            var rule = new JsonNetFilterRule
+            {
+                Condition = "and",
+                Not = true,
+                Rules = new List<JsonNetFilterRule>
+                {
+                    new JsonNetFilterRule()
+                    {
+                        Field = "Name",
+                        Id = "Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "1"
+                    },
+                    new JsonNetFilterRule()
+                    {
+                        Field = "Category",
+                        Id = "Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "a"
+                    },
+                }
+            };
+
+            var list = new List<SimpleClass>()
+            {
+                new SimpleClass(){Name="1", Category="a" },
+                new SimpleClass(){Name="2", Category="a" },
+                new SimpleClass(){Name="3", Category="b" },
+                new SimpleClass(){Name="4", Category="b" },
+            };
+
+            var results = list.BuildQuery(rule);
+            Assert.AreEqual(3, results.Count());
+        }
+
+        [Test]
+        public void Negation_TestFilter()
+        {
+            var rule = new JsonNetFilterRule
+            {
+                Condition = "and",
+                Rules = new List<JsonNetFilterRule>
+                {
+                    new JsonNetFilterRule()
+                    {
+                        Not= true,
+                        Field = "Name",
+                        Id = "Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "1"
+                    },
+                    new JsonNetFilterRule()
+                    {
+                        Field = "Category",
+                        Id = "Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "a"
+                    },
+                }
+            };
+
+            var list = new List<SimpleClass>()
+            {
+                new SimpleClass(){Name="1", Category="a" },
+                new SimpleClass(){Name="2", Category="a" },
+                new SimpleClass(){Name="3", Category="b" },
+                new SimpleClass(){Name="4", Category="b" },
+            };
+
+            var results = list.BuildQuery(rule);
+            Assert.AreEqual(1, results.Count());
+            Assert.AreEqual("2", results.Single().Name);
+        }
+
+        [Test]
+        public void Negation_TestGroupAndFilter()
+        {
+            var rule = new JsonNetFilterRule
+            {
+                Not = true,
+                Condition = "and",
+                Rules = new List<JsonNetFilterRule>
+                {
+                    new JsonNetFilterRule()
+                    {
+                        Not= true,
+                        Field = "Name",
+                        Id = "Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "1"
+                    },
+                    new JsonNetFilterRule()
+                    {
+                        Field = "Category",
+                        Id = "Category",
+                        Operator = "equal",
+                        Type="string",
+                        Value = "a"
+                    },
+                }
+            };
+
+            var list = new List<SimpleClass>()
+            {
+                new SimpleClass(){Name="1", Category="a" },
+                new SimpleClass(){Name="2", Category="a" },
+                new SimpleClass(){Name="3", Category="b" },
+                new SimpleClass(){Name="4", Category="b" },
+            };
+
+            var results = list.BuildQuery(rule);
+            Assert.AreEqual(3, results.Count());
+        }
     }
 }

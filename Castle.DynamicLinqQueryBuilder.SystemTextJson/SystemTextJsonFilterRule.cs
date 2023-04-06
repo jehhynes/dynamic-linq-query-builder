@@ -58,6 +58,13 @@ namespace Castle.DynamicLinqQueryBuilder.SystemTextJson
         /// The type.
         /// </value>
         public string Type { get; set; }
+        /// <summary>
+        /// Gets or sets whether the rule is negated.
+        /// </summary>
+        /// <value>
+        /// Whether the rule is negated.
+        /// </value>
+        public bool Not { get; set; }
 
         private Object _Value { get; set; }
         /// <summary>
